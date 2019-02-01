@@ -30,10 +30,6 @@ impl<R> Crc32Reader<R>
     {
         self.check == self.hasher.clone().finalize()
     }
-
-    pub fn into_inner(self) -> R {
-        self.inner
-    }
 }
 
 impl<R: Read> Read for Crc32Reader<R>
