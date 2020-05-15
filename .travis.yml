@@ -11,6 +11,8 @@ os:
 
 dist:
     - bionic
+    - denial
+    - trusty
 
 arch:
     - amd64
