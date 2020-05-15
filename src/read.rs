@@ -94,12 +94,15 @@ pub trait ZipArchiveRead {
     fn by_index<'a>(&'a mut self, file_number: usize) -> ZipResult<ZipFile<'a>>;
 
     /// Get the comment field for this archive
-    fn comment<'a>(&'a self) -> &Vec<u8>;
+    fn comment<'a>(&'a self) -> &[u8];
 
     /// Unwrap and return the inner reader object
     ///
     /// The position of the reader is undefined.
     fn into_inner(self) -> Self::Reader;
+
+    // NOTE: https://users.rust-lang.org/t/impl-trait-for-trait-methods/16050
+    //fn file_names(&self) -> impl Iterator<Item = &str>;
 }
 
 enum ZipFileReader<'a> {
@@ -268,6 +271,10 @@ impl<R: Read+io::Seek> ZipArchive<R>
         })
     }
 
+    /// Returns an iterator over all the file and directory names in this archive.
+    fn file_names(&self) -> impl Iterator<Item = &str> {
+        self.names_map.keys().map(|s| s.as_str())
+    }
 }
 
 impl <R: Read+io::Seek> ZipArchiveRead for ZipArchive<R> {
@@ -282,17 +289,12 @@ impl <R: Read+io::Seek> ZipArchiveRead for ZipArchive<R> {
     }
 
     /// Get the comment of the zip archive.
-    pub fn comment(&self) -> &[u8] {
+    fn comment(&self) -> &[u8] {
         &self.comment
     }
 
-    /// Returns an iterator over all the file and directory names in this archive.
-    pub fn file_names(&self) -> impl Iterator<Item = &str> {
-        self.names_map.keys().map(|s| s.as_str())
-    }
-
     /// Search for a file entry by name
-    pub fn by_name<'a>(&'a mut self, name: &str) -> ZipResult<ZipFile<'a>>
+    fn by_name<'a>(&'a mut self, name: &str) -> ZipResult<ZipFile<'a>>
     {
         let index = match self.names_map.get(name) {
             Some(index) => *index,
@@ -329,9 +331,6 @@ impl <R: Read+io::Seek> ZipArchiveRead for ZipArchive<R> {
         let limit_reader = (self.reader.by_ref() as &mut dyn Read).take(data.compressed_size);
 
         Ok(ZipFile { reader: make_reader(data.compression_method, data.crc32, limit_reader)?, data: Cow::Borrowed(data) })
-    }
-    fn comment<'a>(&'a self) -> &Vec<u8> {
-        &self.comment
     }
 
     fn into_inner(self) -> R

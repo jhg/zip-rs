@@ -79,6 +79,12 @@ pub trait ZipArchiveWrite {
     /// This will return the writer, but one should normally not append any data to the end of the file.
     /// Note that the zipfile will also be finished on drop.
     fn finish(&mut self) -> ZipResult<Self::Writer>;
+
+    fn start_file_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()>;
+
+    fn add_directory_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()>;
+
+    fn finalize(&mut self) -> ZipResult<()>;
 }
 
 #[derive(Default)]
@@ -326,14 +332,14 @@ impl<W: Write+io::Seek> ZipArchiveWrite for ZipWriter<W> {
     ///
     /// This function ensures that the '/' path seperator is used. It also ignores all non 'Normal'
     /// Components, such as a starting '/' or '..' and '.'.
-    pub fn start_file_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()> {
+    fn start_file_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()> {
         self.start_file(path_to_string(path), options)
     }
 
     /// Add a directory entry.
     ///
     /// You can't write data to the file afterwards.
-    pub fn add_directory<S>(&mut self, name: S, mut options: FileOptions) -> ZipResult<()>
+    fn add_directory<S>(&mut self, name: S, mut options: FileOptions) -> ZipResult<()>
         where S: Into<String>
     {
         if options.permissions.is_none() {
@@ -358,7 +364,7 @@ impl<W: Write+io::Seek> ZipArchiveWrite for ZipWriter<W> {
     ///
     /// This function ensures that the '/' path seperator is used. It also ignores all non 'Normal'
     /// Components, such as a starting '/' or '..' and '.'.
-    pub fn add_directory_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()> {
+    fn add_directory_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()> {
         self.add_directory(path_to_string(path.into()), options)
     }
 
@@ -366,7 +372,7 @@ impl<W: Write+io::Seek> ZipArchiveWrite for ZipWriter<W> {
     ///
     /// This will return the writer, but one should normally not append any data to the end of the file.
     /// Note that the zipfile will also be finished on drop.
-    pub fn finish(&mut self) -> ZipResult<W>
+    fn finish(&mut self) -> ZipResult<W>
     {
         self.finalize()?;
         let inner = mem::replace(&mut self.inner, GenericZipWriter::Closed);
