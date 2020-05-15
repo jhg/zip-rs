@@ -27,6 +27,7 @@ mod ffi {
 /// Wrapper for reading the contents of a ZIP file.
 ///
 /// ```
+/// use zip::ZipArchiveRead;
 /// fn doit() -> zip::result::ZipResult<()>
 /// {
 ///     use std::io::prelude::*;
@@ -58,6 +59,47 @@ pub struct ZipArchive<R: Read + io::Seek>
     names_map: HashMap<String, usize>,
     offset: u64,
     comment: Vec<u8>,
+}
+
+
+/// Trait describing functionality of a ZIP file
+pub trait ZipArchiveRead {
+    /// Underlying reader type
+    type Reader;
+    /// Number of files contained in this zip.
+    ///
+    /// ```
+    /// use zip::ZipArchiveRead;
+    /// fn iter() {
+    ///     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(vec![])).unwrap();
+    ///
+    ///     for i in 0..zip.len() {
+    ///         let mut file = zip.by_index(i).unwrap();
+    ///         // Do something with file i
+    ///     }
+    /// }
+    /// ```
+    fn len(&self) -> usize;
+
+    /// Get the offset from the beginning of the underlying reader that this zip begins at, in bytes.
+    ///
+    /// Normally this value is zero, but if the zip has arbitrary data prepended to it, then this value will be the size
+    /// of that prepended data.
+    fn offset(&self) -> u64;
+
+    /// Search for a file entry by name
+    fn by_name<'a>(&'a mut self, name: &str) -> ZipResult<ZipFile<'a>>;
+
+    /// Get a contained file by index
+    fn by_index<'a>(&'a mut self, file_number: usize) -> ZipResult<ZipFile<'a>>;
+
+    /// Get the comment field for this archive
+    fn comment<'a>(&'a self) -> &Vec<u8>;
+
+    /// Unwrap and return the inner reader object
+    ///
+    /// The position of the reader is undefined.
+    fn into_inner(self) -> Self::Reader;
 }
 
 enum ZipFileReader<'a> {
@@ -226,33 +268,20 @@ impl<R: Read+io::Seek> ZipArchive<R>
         })
     }
 
-    /// Number of files contained in this zip.
-    ///
-    /// ```
-    /// fn iter() {
-    ///     let mut zip = zip::ZipArchive::new(std::io::Cursor::new(vec![])).unwrap();
-    ///
-    ///     for i in 0..zip.len() {
-    ///         let mut file = zip.by_index(i).unwrap();
-    ///         // Do something with file i
-    ///     }
-    /// }
-    /// ```
-    pub fn len(&self) -> usize
+}
+
+impl <R: Read+io::Seek> ZipArchiveRead for ZipArchive<R> {
+    type Reader = R;
+    fn len(&self) -> usize
     {
         self.files.len()
     }
 
-    /// Get the offset from the beginning of the underlying reader that this zip begins at, in bytes.
-    ///
-    /// Normally this value is zero, but if the zip has arbitrary data prepended to it, then this value will be the size
-    /// of that prepended data.
-    pub fn offset(&self) -> u64 {
+    fn offset(&self) -> u64 {
         self.offset
     }
 
-    /// Search for a file entry by name
-    pub fn by_name<'a>(&'a mut self, name: &str) -> ZipResult<ZipFile<'a>>
+    fn by_name<'a>(&'a mut self, name: &str) -> ZipResult<ZipFile<'a>>
     {
         let index = match self.names_map.get(name) {
             Some(index) => *index,
@@ -261,8 +290,7 @@ impl<R: Read+io::Seek> ZipArchive<R>
         self.by_index(index)
     }
 
-    /// Get a contained file by index
-    pub fn by_index<'a>(&'a mut self, file_number: usize) -> ZipResult<ZipFile<'a>>
+    fn by_index<'a>(&'a mut self, file_number: usize) -> ZipResult<ZipFile<'a>>
     {
         if file_number >= self.files.len() { return Err(ZipError::FileNotFound); }
         let ref mut data = self.files[file_number];
@@ -291,11 +319,11 @@ impl<R: Read+io::Seek> ZipArchive<R>
 
         Ok(ZipFile { reader: make_reader(data.compression_method, data.crc32, limit_reader)?, data: Cow::Borrowed(data) })
     }
+    fn comment<'a>(&'a self) -> &Vec<u8> {
+        &self.comment
+    }
 
-    /// Unwrap and return the inner reader object
-    ///
-    /// The position of the reader is undefined.
-    pub fn into_inner(self) -> R
+    fn into_inner(self) -> R
     {
         self.reader
     }
@@ -646,7 +674,7 @@ mod test {
     #[test]
     fn zip64_with_leading_junk() {
         use std::io;
-        use super::ZipArchive;
+        use super::{ZipArchive, ZipArchiveRead};
 
         let mut v = Vec::new();
         v.extend_from_slice(include_bytes!("../tests/data/zip64_demo.zip"));
@@ -657,12 +685,12 @@ mod test {
     #[test]
     fn zip_comment() {
         use std::io;
-        use super::ZipArchive;
+        use super::{ZipArchive, ZipArchiveRead};
 
         let mut v = Vec::new();
         v.extend_from_slice(include_bytes!("../tests/data/mimetype.zip"));
         let reader = ZipArchive::new(io::Cursor::new(v)).unwrap();
-        assert!(reader.comment == b"zip-rs");
+        assert!(reader.comment() == b"zip-rs");
     }
 
     #[test]
@@ -684,7 +712,7 @@ mod test {
     #[test]
     fn zip_clone() {
         use std::io::{self, Read};
-        use super::ZipArchive;
+        use super::{ZipArchive, ZipArchiveRead};
 
         let mut v = Vec::new();
         v.extend_from_slice(include_bytes!("../tests/data/mimetype.zip"));

@@ -12,7 +12,9 @@ extern crate podio;
 extern crate time;
 
 pub use read::ZipArchive;
+pub use read::ZipArchiveRead;
 pub use write::ZipWriter;
+pub use write::ZipArchiveWrite;
 pub use compression::CompressionMethod;
 pub use types::DateTime;
 
