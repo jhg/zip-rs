@@ -30,6 +30,7 @@ enum GenericZipWriter<W: Write + io::Seek>
 /// Generator for ZIP files.
 ///
 /// ```
+/// use zip::ZipArchiveWrite;
 /// fn doit() -> zip::result::ZipResult<()>
 /// {
 ///     use std::io::Write;
@@ -58,6 +59,32 @@ pub struct ZipWriter<W: Write + io::Seek>
     stats: ZipWriterStats,
     writing_to_file: bool,
     comment: String,
+}
+
+/// Trait describing how to write to a ZIP file
+pub trait ZipArchiveWrite {
+    /// Underlying writer
+    type Writer;
+
+    /// Starts a file.
+    fn start_file<S>(&mut self, name: S, options: FileOptions) -> ZipResult<()> where S: Into<String>;
+
+    /// Add a directory entry.
+    ///
+    /// You can't write data to the file afterwards.
+    fn add_directory<S>(&mut self, name: S, options: FileOptions) -> ZipResult<()> where S: Into<String>;
+
+    /// Finish the last file and write all other zip-structures
+    ///
+    /// This will return the writer, but one should normally not append any data to the end of the file.
+    /// Note that the zipfile will also be finished on drop.
+    fn finish(&mut self) -> ZipResult<Self::Writer>;
+
+    fn start_file_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()>;
+
+    fn add_directory_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()>;
+
+    fn finalize(&mut self) -> ZipResult<()>;
 }
 
 #[derive(Default)]
@@ -254,8 +281,42 @@ impl<W: Write+io::Seek> ZipWriter<W>
         Ok(())
     }
 
-    /// Starts a file.
-    pub fn start_file<S>(&mut self, name: S, mut options: FileOptions) -> ZipResult<()>
+    fn finalize(&mut self) -> ZipResult<()>
+    {
+        self.finish_file()?;
+
+        {
+            let writer = self.inner.get_plain();
+
+            let central_start = writer.seek(io::SeekFrom::Current(0))?;
+            for file in self.files.iter()
+            {
+                write_central_directory_header(writer, file)?;
+            }
+            let central_size = writer.seek(io::SeekFrom::Current(0))? - central_start;
+
+            let footer = spec::CentralDirectoryEnd
+            {
+                disk_number: 0,
+                disk_with_central_directory: 0,
+                number_of_files_on_this_disk: self.files.len() as u16,
+                number_of_files: self.files.len() as u16,
+                central_directory_size: central_size as u32,
+                central_directory_offset: central_start as u32,
+                zip_file_comment: b"zip-rs".to_vec(),
+            };
+
+            footer.write(writer)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<W: Write+io::Seek> ZipArchiveWrite for ZipWriter<W> {
+    type Writer = W;
+
+    fn start_file<S>(&mut self, name: S, mut options: FileOptions) -> ZipResult<()>
         where S: Into<String>
     {
         if options.permissions.is_none() {
@@ -271,14 +332,14 @@ impl<W: Write+io::Seek> ZipWriter<W>
     ///
     /// This function ensures that the '/' path seperator is used. It also ignores all non 'Normal'
     /// Components, such as a starting '/' or '..' and '.'.
-    pub fn start_file_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()> {
+    fn start_file_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()> {
         self.start_file(path_to_string(path), options)
     }
 
     /// Add a directory entry.
     ///
     /// You can't write data to the file afterwards.
-    pub fn add_directory<S>(&mut self, name: S, mut options: FileOptions) -> ZipResult<()>
+    fn add_directory<S>(&mut self, name: S, mut options: FileOptions) -> ZipResult<()>
         where S: Into<String>
     {
         if options.permissions.is_none() {
@@ -303,7 +364,7 @@ impl<W: Write+io::Seek> ZipWriter<W>
     ///
     /// This function ensures that the '/' path seperator is used. It also ignores all non 'Normal'
     /// Components, such as a starting '/' or '..' and '.'.
-    pub fn add_directory_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()> {
+    fn add_directory_from_path(&mut self, path: &std::path::Path, options: FileOptions) -> ZipResult<()> {
         self.add_directory(path_to_string(path.into()), options)
     }
 
@@ -311,7 +372,7 @@ impl<W: Write+io::Seek> ZipWriter<W>
     ///
     /// This will return the writer, but one should normally not append any data to the end of the file.
     /// Note that the zipfile will also be finished on drop.
-    pub fn finish(&mut self) -> ZipResult<W>
+    fn finish(&mut self) -> ZipResult<W>
     {
         self.finalize()?;
         let inner = mem::replace(&mut self.inner, GenericZipWriter::Closed);
@@ -565,7 +626,7 @@ mod test {
     use std::io;
     use std::io::Write;
     use crate::types::DateTime;
-    use super::{FileOptions, ZipWriter};
+    use super::{FileOptions, ZipWriter, ZipArchiveWrite};
     use crate::compression::CompressionMethod;
 
     #[test]

@@ -1,5 +1,6 @@
 use std::io::prelude::*;
 use zip::write::FileOptions;
+use zip::{ZipArchiveRead, ZipArchiveWrite};
 use std::io::Cursor;
 use std::iter::FromIterator;
 use std::collections::HashSet;

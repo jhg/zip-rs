@@ -2,6 +2,8 @@
 
 #![warn(missing_docs)]
 
+pub use read::ZipArchiveRead;
+pub use write::ZipArchiveWrite;
 pub use crate::read::ZipArchive;
 pub use crate::write::ZipWriter;
 pub use crate::compression::CompressionMethod;

@@ -1,5 +1,6 @@
 use std::io;
 use std::fs;
+use zip::ZipArchiveRead;
 
 fn main() {
     std::process::exit(real_main());
