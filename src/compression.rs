@@ -45,7 +45,7 @@ impl CompressionMethod {
 }
 
 impl fmt::Display for CompressionMethod {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Just duplicate what the Debug format looks like, i.e, the enum key:
         write!(f, "{:?}", self)
     }
@@ -65,25 +65,14 @@ mod test {
         }
     }
 
-    #[cfg(all(not(feature = "bzip2"), feature = "deflate"))]
     fn methods() -> Vec<CompressionMethod> {
-        vec![CompressionMethod::Stored, CompressionMethod::Deflated]
+        let mut methods = Vec::new();
+        methods.push(CompressionMethod::Stored);
+        #[cfg(feature="deflate")] methods.push(CompressionMethod::Deflated);
+        #[cfg(feature="bzip2")] methods.push(CompressionMethod::Bzip2);
+        methods
     }
 
-    #[cfg(all(not(feature = "deflate"), feature = "bzip2"))]
-    fn methods() -> Vec<CompressionMethod> {
-        vec![CompressionMethod::Stored, CompressionMethod::Bzip2]
-    }
-
-    #[cfg(all(feature = "bzip2", feature = "deflate"))]
-    fn methods() -> Vec<CompressionMethod> {
-        vec![CompressionMethod::Stored, CompressionMethod::Deflated, CompressionMethod::Bzip2]
-    }
-
-    #[cfg(all(not(feature = "bzip2"), not(feature = "deflate")))]
-    fn methods() -> Vec<CompressionMethod> {
-        vec![CompressionMethod::Stored]
-    }
 
     #[test]
     fn to_eq_from() {

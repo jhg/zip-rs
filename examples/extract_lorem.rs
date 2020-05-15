@@ -1,8 +1,6 @@
 use std::io::prelude::*;
 use zip::ZipArchiveRead;
 
-extern crate zip;
-
 fn main()
 {
     std::process::exit(real_main());

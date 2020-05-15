@@ -2,8 +2,21 @@ language: rust
 
 rust:
     - stable
+    - nightly
 
-sudo: false
+os:
+    - linux
+    - osx
+    - windows
+
+dist:
+    - bionic
+    - denial
+    - trusty
+
+arch:
+    - amd64
+    - arm64
 
 notifications:
     email:

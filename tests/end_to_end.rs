@@ -1,14 +1,14 @@
-extern crate zip;
-
 use std::io::prelude::*;
 use zip::write::FileOptions;
 use zip::{ZipArchiveRead, ZipArchiveWrite};
 use std::io::Cursor;
+use std::iter::FromIterator;
+use std::collections::HashSet;
 
 // This test asserts that after creating a zip file, then reading its contents back out,
 // the extracted data will *always* be exactly the same as the original data.
 #[test]
-fn main() {
+fn end_to_end() {
     let file = &mut Cursor::new(Vec::new());
 
     write_to_zip_file(file).expect("file written");
@@ -21,7 +21,7 @@ fn main() {
 fn write_to_zip_file(file: &mut Cursor<Vec<u8>>) -> zip::result::ZipResult<()> {
     let mut zip = zip::ZipWriter::new(file);
 
-    zip.add_directory("test/", FileOptions::default())?;
+    zip.add_directory("test/", Default::default())?;
 
     let options = FileOptions::default()
         .compression_method(zip::CompressionMethod::Stored)
@@ -29,7 +29,7 @@ fn write_to_zip_file(file: &mut Cursor<Vec<u8>>) -> zip::result::ZipResult<()> {
     zip.start_file("test/☃.txt", options)?;
     zip.write_all(b"Hello, World!\n")?;
 
-    zip.start_file("test/lorem_ipsum.txt", FileOptions::default())?;
+    zip.start_file("test/lorem_ipsum.txt", Default::default())?;
     zip.write_all(LOREM_IPSUM)?;
 
     zip.finish()?;
@@ -38,6 +38,11 @@ fn write_to_zip_file(file: &mut Cursor<Vec<u8>>) -> zip::result::ZipResult<()> {
 
 fn read_zip_file(zip_file: &mut Cursor<Vec<u8>>) -> zip::result::ZipResult<String> {
     let mut archive = zip::ZipArchive::new(zip_file).unwrap();
+
+    let expected_file_names = [ "test/", "test/☃.txt", "test/lorem_ipsum.txt" ];
+    let expected_file_names = HashSet::from_iter(expected_file_names.iter().copied());
+    let file_names = archive.file_names().collect::<HashSet<_>>();
+    assert_eq!(file_names, expected_file_names);
 
     let mut file = archive.by_name("test/lorem_ipsum.txt")?;
 

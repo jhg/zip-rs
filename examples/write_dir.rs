@@ -1,5 +1,3 @@
-extern crate zip;
-extern crate walkdir;
 
 use std::io::prelude::*;
 use std::io::{Write, Seek};
@@ -48,7 +46,7 @@ fn real_main() -> i32 {
     return 0;
 }
 
-fn zip_dir<T>(it: &mut Iterator<Item=DirEntry>, prefix: &str, writer: T, method: zip::CompressionMethod)
+fn zip_dir<T>(it: &mut dyn Iterator<Item=DirEntry>, prefix: &str, writer: T, method: zip::CompressionMethod)
               -> zip::result::ZipResult<()>
     where T: Write+Seek
 {
@@ -60,19 +58,23 @@ fn zip_dir<T>(it: &mut Iterator<Item=DirEntry>, prefix: &str, writer: T, method:
     let mut buffer = Vec::new();
     for entry in it {
         let path = entry.path();
-        let name = path.strip_prefix(Path::new(prefix))
-            .unwrap()
-            .to_str()
-            .unwrap();
+        let name = path.strip_prefix(Path::new(prefix)).unwrap();
 
+        // Write file or directory explicitly
+        // Some unzip tools unzip files with directory paths correctly, some do not!
         if path.is_file() {
-            println!("adding {:?} as {:?} ...", path, name);
-            zip.start_file(name, options)?;
+            println!("adding file {:?} as {:?} ...", path, name);
+            zip.start_file_from_path(name, options)?;
             let mut f = File::open(path)?;
 
             f.read_to_end(&mut buffer)?;
             zip.write_all(&*buffer)?;
             buffer.clear();
+        } else if name.as_os_str().len() != 0 {
+            // Only if not root! Avoids path spec / warning
+            // and mapname conversion failed error on unzip
+            println!("adding dir {:?} as {:?} ...", path, name);
+            zip.add_directory_from_path(name, options)?;
         }
     }
     zip.finish()?;
